@@ -1,74 +1,50 @@
-﻿/*@!Encoding:65001*/
-variables
-{
-  ethernetPacket txPacket; // Ethernet packet variable
-  byte vlanTag[4] = {0x81, 0x00, 0x00, 0x64}; // VLAN tag (TPID: 0x8100, TCI: 0x0064)
-  byte payload[4] = {0x01, 0x02, 0x03, 0x04}; // Payload data
+/*@!Encoding:65001*/
+variables {
+  ethernetPacket txPacket;
+  ethernetPacket txPackets[8];
+  byte vlanTag[4] = {0x81, 0x00, 0x00, 0x64}; 
+  byte payload[4] = {0x01, 0x02, 0x03, 0x04}; 
   msTimer sendTimer;
-  
-  ethernetPacket txPacket_Pri0;
-  ethernetPacket txPacket_Pri1;
-  ethernetPacket txPacket_Pri2;
-  ethernetPacket txPacket_Pri3;
-  ethernetPacket txPacket_Pri4;
-  ethernetPacket txPacket_Pri5;
-  ethernetPacket txPacket_Pri6;
-  ethernetPacket txPacket_Pri7;
+  int currentMessageIndex = 0;
+  byte rxBuffer[1518];
+  dword rxLength;
 }
 
-on start
-{
-  // Initialize the Ethernet packet
-  
-  // Set the Ethernet packet header (e.g., destination MAC address, source MAC address)
-  txPacket.source = EthGetMacAddressAsNumber( "20:00:00:00:00:01" );
-  txPacket.destination = EthGetMacAddressAsNumber( "FF:FF:FF:FF:FF:FF" );
+on preStart {
+  write("Ethernet channel initialization...");
+}
 
-  // Set VLAN tag and payload data
-  txPacket.SetVlan(0x8100,0X00); // VLAN tag indication
-  txPacket.SetVlanPriority(0X1);
-  txPacket.SetVlanId(0x1);
-  txPacket.type = 0x0A0B;
-  txPacket.Byte(0) = 0xAA; // Concatenate VLAN tag and payload
-  
-  // Set the total length of the Ethernet packet
+on start {
+  int i;
+  // 기본 이더넷 패킷 초기화
+  txPacket.source = EthGetMacAddressAsNumber("20:00:00:00:00:01");
+  txPacket.destination = EthGetMacAddressAsNumber("ff:00:00:ff:ff:ff");
+  txPacket.type = 0x0a0b;
+  txPacket.Byte(0) = 0xAA;
   txPacket.length = 100;
 
-  // Transmit the Ethernet packet
-  txPacket_Pri0 = txPacket;
-  txPacket_Pri1 = txPacket;
-  txPacket_Pri2 = txPacket;
-  txPacket_Pri3 = txPacket;
-  txPacket_Pri4 = txPacket;
-  txPacket_Pri5 = txPacket;
-  txPacket_Pri6 = txPacket;
-  txPacket_Pri7 = txPacket;
-  txPacket_Pri0.SetVlanPriority(0X0);
-  txPacket_Pri1.SetVlanPriority(0X1);
-  txPacket_Pri2.SetVlanPriority(0X2);
-  txPacket_Pri3.SetVlanPriority(0X3);
-  txPacket_Pri4.SetVlanPriority(0X4);
-  txPacket_Pri5.SetVlanPriority(0X5);
-  txPacket_Pri6.SetVlanPriority(0X6);
-  txPacket_Pri7.SetVlanPriority(0X7);
-  txPacket_Pri0.SetVlanPriority(0X0);
+  // 모든 패킷을 한번에 초기화
+  for(i = 0; i < 8; i++) {
+    txPackets[i] = txPacket;
+    txPackets[i].byte(0) = i;
+    txPackets[i].byte(1) = 0xfe;
+    txPackets[i].SetVlanId(i);
+    txPackets[i].SetVlanPriority(0x3);
+  }
   
-  write("Ethernet packet with VLAN tag transmitted successfully.");
-  setTimer(sendTimer, 100);
+  // Pri5 패킷 특수 설정
+  txPackets[5].byte(1) = 0x55;
+  txPackets[5].byte(2) = 0xfe;
+  txPackets[5].SetVlanId(101);
 
+  write("Ethernet packets initialized successfully.");
+  
+  // 초기 타이머 시작
+  setTimer(sendTimer, 1);
 }
 
-on timer sendTimer
-{
-  // Send the Ethernet message  
-  output(txPacket_Pri0);
-  output(txPacket_Pri1);
-  output(txPacket_Pri2);
-  output(txPacket_Pri3);
-  output(txPacket_Pri4);
-  output(txPacket_Pri5);
-  output(txPacket_Pri6);
-  output(txPacket_Pri7);
-  // Restart the timer
-  setTimer(sendTimer, 100);
+on timer sendTimer {
+  output(txPackets[currentMessageIndex]);
+  currentMessageIndex = (currentMessageIndex + 1) % 8; // 0-7 사이에서 순환
+  setTimer(sendTimer, 1);
 }
